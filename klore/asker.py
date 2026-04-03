@@ -11,6 +11,17 @@ from klore.git import git_add_and_commit
 from klore.ingester import slugify
 from klore.models import get_client, get_context_limit, get_model
 
+
+def _strip_code_fences(text: str) -> str:
+    """Strip wrapping ```markdown ... ``` fences from LLM output."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_nl = stripped.index("\n") if "\n" in stripped else len(stripped)
+        stripped = stripped[first_nl + 1:]
+    if stripped.endswith("```"):
+        stripped = stripped[:-3]
+    return stripped.strip()
+
 CONTEXT_BUDGET_RATIO = 0.80  # use at most 80% of the model's context for wiki content
 CHARS_PER_TOKEN = 4  # rough estimation factor
 
@@ -84,7 +95,7 @@ def ask(project_dir: Path, question: str, save: bool = False) -> str:
         model=model,
         messages=[{"role": "user", "content": prompt}],
     )
-    answer = response.choices[0].message.content
+    answer = _strip_code_fences(response.choices[0].message.content)
 
     # --- 5. Optionally save as a report ------------------------------------
     if save:

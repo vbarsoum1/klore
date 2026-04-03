@@ -142,6 +142,17 @@ def _list_files_summary(directory: Path, prefix: str = "") -> str:
     return "\n".join(lines) if lines else "(none)"
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip wrapping ```markdown ... ``` fences from LLM output."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_nl = stripped.index("\n") if "\n" in stripped else len(stripped)
+        stripped = stripped[first_nl + 1:]
+    if stripped.endswith("```"):
+        stripped = stripped[:-3]
+    return stripped.strip()
+
+
 def _atomic_write(path: Path, content: str) -> None:
     """Write content to a file atomically via tmp + rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -248,7 +259,7 @@ async def _process_source(
         # Write atomically to wiki/sources/{slug}.md
         slug = slugify(file_path.stem)
         dest = wiki_dir / "sources" / f"{slug}.md"
-        _atomic_write(dest, output)
+        _atomic_write(dest, _strip_code_fences(output))
 
         # Update state
         file_hash = await asyncio.to_thread(hash_file, file_path)
@@ -447,7 +458,7 @@ async def _process_concept(
                 return False
 
         # Write atomically
-        _atomic_write(existing_path, output)
+        _atomic_write(existing_path, _strip_code_fences(output))
 
         # Update state
         state.update_concept_sources(concept_slug, source_slugs)
@@ -558,7 +569,7 @@ async def _pass3(
         output = await _llm_call(
             client, model, "You are a knowledge compiler.", user_prompt
         )
-        _atomic_write(dest, output)
+        _atomic_write(dest, _strip_code_fences(output))
 
     await asyncio.gather(*[
         _generate_index(idx_type, dest)

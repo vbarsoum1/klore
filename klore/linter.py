@@ -8,6 +8,17 @@ import click
 
 from klore.models import get_client, get_context_limit, get_model
 
+
+def _strip_code_fences(text: str) -> str:
+    """Strip wrapping ```markdown ... ``` fences from LLM output."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_nl = stripped.index("\n") if "\n" in stripped else len(stripped)
+        stripped = stripped[first_nl + 1:]
+    if stripped.endswith("```"):
+        stripped = stripped[:-3]
+    return stripped.strip()
+
 SKIP_DIRS = {"_meta"}
 WIKI_SUBDIRS = ["sources", "concepts", "reports"]
 FALLBACK_SUBDIRS = ["concepts"]
@@ -72,7 +83,7 @@ def lint(project_dir: Path) -> str:
         model=model_id,
         messages=[{"role": "user", "content": prompt}],
     )
-    report = response.choices[0].message.content or ""
+    report = _strip_code_fences(response.choices[0].message.content or "")
 
     # Save report
     meta_dir = wiki_dir / "_meta"
