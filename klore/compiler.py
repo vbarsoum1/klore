@@ -333,7 +333,7 @@ async def _normalize_tags(
     )
 
     prompt_template = _read_prompt("normalize_tags.md")
-    user_prompt = prompt_template.format(tag_list="\n".join(f"- {t}" for t in all_tags))
+    user_prompt = prompt_template.replace("{tag_list}", "\n".join(f"- {t}" for t in all_tags))
 
     output = await _llm_call(
         client, model, "You are a tag normalizer.", user_prompt
