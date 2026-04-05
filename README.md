@@ -21,7 +21,8 @@ Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/4
 ```bash
 git clone https://github.com/vbarsoum1/llm-wiki-compiler.git
 pip install ./llm-wiki-compiler
-claude plugin install ./llm-wiki-compiler/klore/plugin
+claude plugin marketplace add ./llm-wiki-compiler/klore/plugin
+claude plugin install klore
 ```
 
 Then in Claude Code:
@@ -173,7 +174,8 @@ git clone https://github.com/vbarsoum1/llm-wiki-compiler.git
 pipx install ./llm-wiki-compiler   # or: pip install ./llm-wiki-compiler
 
 # Install the Claude Code plugin
-claude plugin install ./llm-wiki-compiler/klore/plugin
+claude plugin marketplace add ./llm-wiki-compiler/klore/plugin
+claude plugin install klore
 ```
 
 Then in Claude Code: `/wiki-init`, `/wiki-compile`, `/wiki-ingest`, `/wiki-ask`, `/wiki-status`, `/wiki-lint`, `/wiki-watch`.
@@ -196,6 +198,33 @@ klore config set model.director anthropic/claude-sonnet-4-6
 klore config set model.strong openai/gpt-4o
 klore config set model.fast google/gemini-2.5-flash
 ```
+
+## Cost
+
+Klore uses a three-tier model architecture to keep costs low. The expensive Director model (Opus) only handles editorial judgment. The bulk of the work (extraction, synthesis, indexing) runs on cheaper models.
+
+**OpenRouter pricing (per million tokens, as of April 2026):**
+
+| Tier | Model | Input | Output |
+|------|-------|-------|--------|
+| Director | Claude Opus 4.6 | $5.00 | $25.00 |
+| Strong | Gemini 3.1 Pro | $2.00 | $12.00 |
+| Fast | Gemini 3 Flash | $0.50 | $3.00 |
+
+**Estimated cost per full compile:**
+
+| Sources | LLM Calls | Est. Cost | Per Source |
+|---------|-----------|-----------|-----------|
+| 5 | ~25 | ~$0.60 | ~$0.12 |
+| 10 | ~47 | ~$1.25 | ~$0.13 |
+| 25 | ~110 | ~$3.00 | ~$0.12 |
+| 50 | ~215 | ~$6.00 | ~$0.12 |
+
+**Incremental compiles are cheaper.** Adding one source to an existing wiki costs ~$0.15-$0.25 (skips unchanged sources, only rebuilds affected concepts).
+
+**Where the money goes:** For a 10-source compile, roughly 60% goes to the Director (briefs + reviews + overview), 39% to the Strong model (summaries + concepts + entities + index), and <1% to the Fast model (tag normalization).
+
+**Budget model:** Swap `model.director` to `anthropic/claude-sonnet-4-6` ($3/$15 per M tokens) to cut Director costs by 40%. Swap `model.strong` to `google/gemini-3-flash-preview` for another 75% savings on synthesis, with some quality tradeoff.
 
 ## Architecture
 

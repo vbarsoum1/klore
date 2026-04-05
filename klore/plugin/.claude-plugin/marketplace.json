@@ -1,0 +1,14 @@
+{
+  "name": "klore",
+  "description": "Klore LLM Knowledge Compiler plugins",
+  "owner": {
+    "name": "Victor Barsoum"
+  },
+  "plugins": [
+    {
+      "name": "klore",
+      "description": "LLM Knowledge Compiler — compile raw sources into an Obsidian-compatible wiki with AI-driven editorial judgment",
+      "source": "./plugins/klore"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "description": "Injects wiki context into Claude Code sessions when a klore knowledge base is present",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

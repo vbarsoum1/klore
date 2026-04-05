@@ -1,0 +1,8 @@
+{
+  "name": "klore",
+  "description": "LLM Knowledge Compiler — compile raw sources into an Obsidian-compatible wiki with AI-driven editorial judgment",
+  "version": "0.1.0",
+  "author": {
+    "name": "Victor Barsoum"
+  }
+}
