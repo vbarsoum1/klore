@@ -27,6 +27,8 @@ Action: {action}
 
 ## Output
 
+Add a coverage tag at the start of each major section: `[coverage: high]` (5+ sources), `[coverage: medium]` (2-4 sources), or `[coverage: low]` (0-1 sources).
+
 Produce a markdown entity page with this structure:
 
 ```markdown

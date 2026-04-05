@@ -35,6 +35,34 @@ WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 SEMAPHORE_LIMIT = 5
 
 
+# ── Token tracking ──────────────────────────────────────────────────
+
+
+class _TokenTracker:
+    """Accumulates token usage across multiple LLM calls."""
+
+    def __init__(self):
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+
+    def add(self, usage):
+        if usage:
+            try:
+                val = getattr(usage, 'prompt_tokens', 0)
+                self.prompt_tokens += int(val) if val else 0
+            except (TypeError, ValueError):
+                pass
+            try:
+                val = getattr(usage, 'completion_tokens', 0)
+                self.completion_tokens += int(val) if val else 0
+            except (TypeError, ValueError):
+                pass
+
+    @property
+    def total_tokens(self):
+        return self.prompt_tokens + self.completion_tokens
+
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
@@ -211,6 +239,7 @@ def _llm_call_sync(
     model: str,
     system_prompt: str,
     user_prompt: str,
+    tracker: _TokenTracker | None = None,
 ) -> str:
     """Synchronous LLM call via the OpenAI SDK."""
     response = client.chat.completions.create(
@@ -220,6 +249,8 @@ def _llm_call_sync(
             {"role": "user", "content": user_prompt},
         ],
     )
+    if tracker and hasattr(response, 'usage'):
+        tracker.add(response.usage)
     return response.choices[0].message.content or ""
 
 
@@ -228,10 +259,11 @@ async def _llm_call(
     model: str,
     system_prompt: str,
     user_prompt: str,
+    tracker: _TokenTracker | None = None,
 ) -> str:
     """Async wrapper: run the synchronous OpenAI client in a thread."""
     return await asyncio.to_thread(
-        _llm_call_sync, client, model, system_prompt, user_prompt
+        _llm_call_sync, client, model, system_prompt, user_prompt, tracker
     )
 
 
@@ -328,6 +360,7 @@ async def _get_editorial_brief(
     director_model: str,
     agents_md: str,
     semaphore: asyncio.Semaphore,
+    tracker: _TokenTracker | None = None,
 ) -> dict[str, Any]:
     """Call Director to produce an editorial brief for a single extraction."""
     async with semaphore:
@@ -355,6 +388,7 @@ async def _get_editorial_brief(
             client, director_model,
             "You are the editorial director of a knowledge wiki.",
             user_prompt,
+            tracker=tracker,
         )
 
         # Parse JSON response
@@ -387,6 +421,7 @@ async def _step2_editorial_briefs(
     project_dir: Path,
     client: Any,
     agents_md: str,
+    tracker: _TokenTracker | None = None,
 ) -> list[dict[str, Any]]:
     """Step 2: Get editorial briefs from the Director for each extraction."""
     if not extractions:
@@ -402,6 +437,7 @@ async def _step2_editorial_briefs(
     tasks = [
         _get_editorial_brief(
             ext, wiki_dir, client, director_model, agents_md, semaphore,
+            tracker=tracker,
         )
         for ext in extractions
     ]
@@ -421,6 +457,7 @@ async def _step3_normalize_tags(
     wiki_dir: Path,
     client: Any,
     fast_model: str,
+    tracker: _TokenTracker | None = None,
 ) -> dict[str, str]:
     """Step 3: Normalize tags across all source summaries via LLM."""
     all_tags = _collect_all_tags(wiki_dir / "sources")
@@ -438,7 +475,8 @@ async def _step3_normalize_tags(
     )
 
     output = await _llm_call(
-        client, fast_model, "You are a tag normalizer.", user_prompt
+        client, fast_model, "You are a tag normalizer.", user_prompt,
+        tracker=tracker,
     )
 
     # Parse JSON from response — strip markdown fences if present
@@ -490,6 +528,7 @@ async def _build_source_summary(
     existing_tags: list[str],
     state: CompileState,
     semaphore: asyncio.Semaphore,
+    tracker: _TokenTracker | None = None,
 ) -> bool:
     """Build a single source summary guided by the editorial brief.
 
@@ -515,7 +554,8 @@ async def _build_source_summary(
         )
 
         output = await _llm_call(
-            client, strong_model, "You are a knowledge compiler.", user_prompt
+            client, strong_model, "You are a knowledge compiler.", user_prompt,
+            tracker=tracker,
         )
 
         # Validate
@@ -528,6 +568,7 @@ async def _build_source_summary(
                 client, strong_model,
                 "You are a knowledge compiler.",
                 user_prompt + "\n\n" + retry_msg,
+                tracker=tracker,
             )
             if not _validate_source_output(output):
                 click.echo(
@@ -556,6 +597,7 @@ async def _step4a_source_summaries(
     client: Any,
     agents_md: str,
     state: CompileState,
+    tracker: _TokenTracker | None = None,
 ) -> int:
     """Step 4a: Build source summaries guided by editorial briefs."""
     if not extractions:
@@ -574,7 +616,7 @@ async def _step4a_source_summaries(
     tasks = [
         _build_source_summary(
             ext, brief, wiki_dir, project_dir, client, strong_model,
-            agents_md, existing_tags, state, semaphore,
+            agents_md, existing_tags, state, semaphore, tracker=tracker,
         )
         for ext, brief in zip(extractions, briefs)
     ]
@@ -660,6 +702,7 @@ async def _build_entity_page(
     known_concepts: list[str],
     state: CompileState,
     semaphore: asyncio.Semaphore,
+    tracker: _TokenTracker | None = None,
 ) -> bool:
     """Build or update a single entity page.
 
@@ -716,7 +759,8 @@ async def _build_entity_page(
         )
 
         output = await _llm_call(
-            client, strong_model, "You are a knowledge compiler.", user_prompt
+            client, strong_model, "You are a knowledge compiler.", user_prompt,
+            tracker=tracker,
         )
 
         if not _validate_concept_output(output):
@@ -728,6 +772,7 @@ async def _build_entity_page(
                 client, strong_model,
                 "You are a knowledge compiler.",
                 user_prompt + "\n\n" + retry_msg,
+                tracker=tracker,
             )
             if not _validate_concept_output(output):
                 click.echo(
@@ -752,6 +797,7 @@ async def _step4b_entity_pages(
     project_dir: Path,
     agents_md: str,
     state: CompileState,
+    tracker: _TokenTracker | None = None,
 ) -> int:
     """Step 4b: Create/update entity pages as directed by briefs."""
     entities = _collect_entities_from_briefs(briefs, extractions)
@@ -779,7 +825,7 @@ async def _step4b_entity_pages(
     tasks = [
         _build_entity_page(
             entity_info, wiki_dir, client, strong_model, agents_md,
-            known_entities, known_concepts, state, semaphore,
+            known_entities, known_concepts, state, semaphore, tracker=tracker,
         )
         for entity_info in entities.values()
     ]
@@ -806,6 +852,7 @@ async def _build_concept_page(
     known_concepts: list[str],
     state: CompileState,
     semaphore: asyncio.Semaphore,
+    tracker: _TokenTracker | None = None,
 ) -> bool:
     """Synthesize a single concept article from grouped sources.
 
@@ -846,7 +893,8 @@ async def _build_concept_page(
 
         # Call LLM
         output = await _llm_call(
-            client, strong_model, "You are a knowledge compiler.", user_prompt
+            client, strong_model, "You are a knowledge compiler.", user_prompt,
+            tracker=tracker,
         )
 
         # Validate
@@ -859,6 +907,7 @@ async def _build_concept_page(
                 client, strong_model,
                 "You are a knowledge compiler.",
                 user_prompt + "\n\n" + retry_msg,
+                tracker=tracker,
             )
             if not _validate_concept_output(output):
                 click.echo(
@@ -884,6 +933,7 @@ async def _step4c_concept_pages(
     state: CompileState,
     aliases: dict[str, str],
     briefs: list[dict[str, Any]] | None = None,
+    tracker: _TokenTracker | None = None,
 ) -> int:
     """Step 4c: Synthesize concept articles.
 
@@ -959,7 +1009,7 @@ async def _step4c_concept_pages(
     tasks = [
         _build_concept_page(
             tag, files, wiki_dir, client, strong_model,
-            agents_md, known_concepts, state, semaphore,
+            agents_md, known_concepts, state, semaphore, tracker=tracker,
         )
         for tag, files in sorted(eligible.items())
     ]
@@ -982,6 +1032,7 @@ async def _step5_review(
     wiki_dir: Path,
     project_dir: Path,
     client: Any,
+    tracker: _TokenTracker | None = None,
 ) -> list[dict[str, Any]]:
     """Step 5: Director reviews the pages created/updated in Step 4.
 
@@ -1065,6 +1116,7 @@ async def _step5_review(
                 client, director_model,
                 "You are the editorial director reviewing wiki changes.",
                 user_prompt,
+                tracker=tracker,
             )
 
             # Parse review JSON
@@ -1119,6 +1171,7 @@ async def _step6_index_and_log(
     sources_processed: int,
     entities_created: int,
     concepts_generated: int,
+    tracker: _TokenTracker | None = None,
 ) -> None:
     """Step 6: Generate index, append log entries, build link graph."""
     strong_model = get_model("strong", project_dir)
@@ -1167,7 +1220,8 @@ async def _step6_index_and_log(
     )
 
     output = await _llm_call(
-        client, strong_model, "You are a knowledge compiler.", user_prompt
+        client, strong_model, "You are a knowledge compiler.", user_prompt,
+        tracker=tracker,
     )
     _atomic_write(wiki_dir / "index.md", _strip_code_fences(output))
 
@@ -1225,6 +1279,7 @@ async def _step7_overview(
     project_dir: Path,
     client: Any,
     agents_md: str,
+    tracker: _TokenTracker | None = None,
 ) -> None:
     """Step 7: Director writes/updates wiki/overview.md."""
     director_model = get_model("director", project_dir)
@@ -1252,6 +1307,7 @@ async def _step7_overview(
         client, director_model,
         "You are the editorial director of a knowledge wiki.",
         user_prompt,
+        tracker=tracker,
     )
 
     _atomic_write(overview_path, _strip_code_fences(output))
@@ -1262,8 +1318,17 @@ async def _step7_overview(
 # ── Main entry point ─────────────────────────────────────────────────
 
 
-async def compile_wiki(project_dir: Path, full: bool = False) -> dict:
-    """Run the seven-step director-driven compilation. Returns stats dict."""
+async def compile_wiki(
+    project_dir: Path,
+    full: bool = False,
+    topic: str | None = None,
+) -> dict:
+    """Run the seven-step director-driven compilation. Returns stats dict.
+
+    When *topic* is set, only the named concept is rebuilt (Step 4c only),
+    skipping extraction, briefs, tag normalization, entities, review, index,
+    and overview.
+    """
     wiki_dir = project_dir / "wiki"
     raw_dir = project_dir / "raw"
 
@@ -1276,6 +1341,118 @@ async def compile_wiki(project_dir: Path, full: bool = False) -> dict:
     agents_md = _read_agents_md(project_dir)
     prompt_hash = _compute_prompt_hash(agents_md)
 
+    # Initialize token tracker
+    tracker = _TokenTracker()
+
+    # Initialize client
+    client = get_client(project_dir)
+
+    # ── Topic-only compile path ──────────────────────────────────
+    if topic:
+        topic_slug = slugify(topic)
+        click.echo(
+            f"Compiling single topic: {topic} (slug: {topic_slug})",
+            err=True,
+        )
+
+        # Load existing tag aliases from disk
+        aliases_path = wiki_dir / "_meta" / "tag-aliases.json"
+        aliases: dict[str, str] = {}
+        if aliases_path.is_file():
+            try:
+                aliases = json.loads(aliases_path.read_text("utf-8"))
+            except json.JSONDecodeError:
+                pass
+
+        # Find source files tagged with this concept
+        sources_dir = wiki_dir / "sources"
+        groups = _group_sources_by_tag(sources_dir, aliases)
+        source_files = groups.get(topic_slug, [])
+
+        # Also try the original topic name as a tag key
+        if not source_files:
+            topic_key = topic.lower().replace(" ", "-")
+            source_files = groups.get(topic_key, [])
+
+        # Fallback: check concept_sources in state
+        if not source_files and topic_slug in state.concept_sources:
+            source_files = []
+            for src_slug in state.concept_sources[topic_slug]:
+                src_path = sources_dir / f"{src_slug}.md"
+                if src_path.is_file():
+                    source_files.append(src_path)
+
+        if not source_files:
+            click.echo(
+                f"  warning: no sources found for topic '{topic}'. "
+                f"Using all source summaries as fallback.",
+                err=True,
+            )
+            source_files = sorted(sources_dir.glob("*.md")) if sources_dir.is_dir() else []
+
+        if not source_files:
+            click.echo(
+                f"Error: no source summaries exist. Run `klore compile` first.",
+                err=True,
+            )
+            return {
+                "sources_processed": 0,
+                "concepts_generated": 0,
+                "entities_created": 0,
+                "tags_normalized": 0,
+                "pass1_skipped": 0,
+                "pass1_errors": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+
+        strong_model = get_model("strong", project_dir)
+        (wiki_dir / "concepts").mkdir(parents=True, exist_ok=True)
+
+        known_concepts = sorted(
+            f.stem for f in (wiki_dir / "concepts").glob("*.md")
+        )
+
+        semaphore = asyncio.Semaphore(SEMAPHORE_LIMIT)
+        success = await _build_concept_page(
+            topic_slug, source_files, wiki_dir, client, strong_model,
+            agents_md, known_concepts, state, semaphore, tracker=tracker,
+        )
+
+        concepts_generated = 1 if success else 0
+
+        # Save state and commit
+        state.total_tokens_used += tracker.total_tokens
+        state.save(wiki_dir)
+
+        try:
+            git_add_and_commit(
+                project_dir,
+                f"klore compile --topic {topic}",
+            )
+        except RuntimeError as exc:
+            click.echo(f"  warning: git commit failed: {exc}", err=True)
+
+        click.echo(
+            f"Topic compile complete: {concepts_generated} concept rebuilt.",
+            err=True,
+        )
+
+        return {
+            "sources_processed": 0,
+            "concepts_generated": concepts_generated,
+            "entities_created": 0,
+            "tags_normalized": 0,
+            "pass1_skipped": 0,
+            "pass1_errors": 0,
+            "prompt_tokens": tracker.prompt_tokens,
+            "completion_tokens": tracker.completion_tokens,
+            "total_tokens": tracker.total_tokens,
+        }
+
+    # ── Full compile path ────────────────────────────────────────
+
     # Check if full recompile needed due to prompt changes
     if state.needs_full_recompile(prompt_hash):
         click.echo(
@@ -1284,9 +1461,6 @@ async def compile_wiki(project_dir: Path, full: bool = False) -> dict:
         full = True
     state.set_prompt_hash(prompt_hash)
 
-    # Initialize client
-    client = get_client(project_dir)
-
     # ── Step 1: Extract ──────────────────────────────────────────
     extractions, pass1_skipped, pass1_errors = await _step1_extract(
         project_dir, raw_dir, state, full
@@ -1294,35 +1468,42 @@ async def compile_wiki(project_dir: Path, full: bool = False) -> dict:
 
     # ── Step 2: Editorial Briefs ─────────────────────────────────
     briefs = await _step2_editorial_briefs(
-        extractions, wiki_dir, project_dir, client, agents_md
+        extractions, wiki_dir, project_dir, client, agents_md,
+        tracker=tracker,
     )
 
     # ── Step 4a: Source Summaries ──────────────────────────────────
     # Write source summaries first — tag normalization and concept
     # synthesis both need them on disk.
     sources_processed = await _step4a_source_summaries(
-        extractions, briefs, wiki_dir, project_dir, client, agents_md, state
+        extractions, briefs, wiki_dir, project_dir, client, agents_md, state,
+        tracker=tracker,
     )
 
     # ── Step 3: Tag Normalize ────────────────────────────────────
     # Run AFTER source summaries are written so we have tags to normalize.
     fast_model = get_model("fast", project_dir)
-    aliases = await _step3_normalize_tags(wiki_dir, client, fast_model)
+    aliases = await _step3_normalize_tags(
+        wiki_dir, client, fast_model, tracker=tracker,
+    )
 
     # ── Step 4b+4c: Entity + Concept Pages ───────────────────────
     # Run entity pages and concept pages concurrently.
     entities_created, concepts_generated = await asyncio.gather(
         _step4b_entity_pages(
-            briefs, extractions, wiki_dir, client, project_dir, agents_md, state
+            briefs, extractions, wiki_dir, client, project_dir, agents_md,
+            state, tracker=tracker,
         ),
         _step4c_concept_pages(
-            wiki_dir, project_dir, client, agents_md, state, aliases, briefs
+            wiki_dir, project_dir, client, agents_md, state, aliases, briefs,
+            tracker=tracker,
         ),
     )
 
     # ── Step 5: Review ───────────────────────────────────────────
     reviews = await _step5_review(
-        extractions, briefs, wiki_dir, project_dir, client
+        extractions, briefs, wiki_dir, project_dir, client,
+        tracker=tracker,
     )
 
     # ── Step 6: Index & Log ──────────────────────────────────────
@@ -1330,12 +1511,16 @@ async def compile_wiki(project_dir: Path, full: bool = False) -> dict:
         wiki_dir, project_dir, client, agents_md,
         extractions, briefs, reviews,
         sources_processed, entities_created, concepts_generated,
+        tracker=tracker,
     )
 
     # ── Step 7: Overview ─────────────────────────────────────────
-    await _step7_overview(wiki_dir, project_dir, client, agents_md)
+    await _step7_overview(
+        wiki_dir, project_dir, client, agents_md, tracker=tracker,
+    )
 
     # ── Finalize ─────────────────────────────────────────────────
+    state.total_tokens_used += tracker.total_tokens
     state.save(wiki_dir)
 
     tags_normalized = sum(1 for k, v in aliases.items() if k != v)
@@ -1356,6 +1541,9 @@ async def compile_wiki(project_dir: Path, full: bool = False) -> dict:
         "tags_normalized": tags_normalized,
         "pass1_skipped": pass1_skipped,
         "pass1_errors": pass1_errors,
+        "prompt_tokens": tracker.prompt_tokens,
+        "completion_tokens": tracker.completion_tokens,
+        "total_tokens": tracker.total_tokens,
     }
 
     click.echo(

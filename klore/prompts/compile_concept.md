@@ -14,6 +14,7 @@ Requirements:
 - Write a clear 2-3 sentence definition
 - Synthesize evidence across all contributing sources
 - Note where sources agree and where they conflict
+- Add a coverage tag at the start of each major section: `[coverage: high]` (5+ sources), `[coverage: medium]` (2-4 sources), or `[coverage: low]` (0-1 sources)
 - Link to all contributing sources using [[source-slug]] wikilinks
 - Link to related concepts using [[concept-slug]] wikilinks
 

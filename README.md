@@ -138,15 +138,35 @@ The wiki is Obsidian-compatible out of the box — `[[wikilinks]]`, backlinks, a
 ```
 klore init [name]            # Create a new knowledge base
 klore add <file|url>         # Add a source (PDF, HTML, markdown, image, URL)
+klore ingest <file|url>      # Add a source and compile in one step
 klore compile                # Compile sources into the wiki (incremental)
 klore compile --full         # Force full recompilation
+klore compile --topic <name> # Recompile a specific concept only
 klore ask "question"         # Ask a question against the wiki
 klore ask --save "question"  # Ask and save the answer as a wiki report
+klore watch                  # Watch raw/ for changes and auto-compile
 klore lint                   # Run health checks (contradictions, broken links)
 klore diff [--since 2w]      # Show wiki changes over time
 klore status                 # Show source/concept counts, compilation state
 klore config set <key> <val> # Configure models, API key
 ```
+
+### Install as Claude Code Plugin
+
+```bash
+# Clone the repo
+git clone https://github.com/vbarsoum1/llm-wiki-compiler.git
+
+# Install the CLI
+pipx install ./llm-wiki-compiler   # or: pip install ./llm-wiki-compiler
+
+# Install the Claude Code plugin
+claude plugin install ./llm-wiki-compiler/klore/plugin
+```
+
+Then in Claude Code: `/wiki-init`, `/wiki-compile`, `/wiki-ingest`, `/wiki-ask`, `/wiki-status`, `/wiki-lint`, `/wiki-watch`.
+
+The plugin auto-injects your wiki's index into every Claude Code session via a SessionStart hook.
 
 ## Model Configuration
 

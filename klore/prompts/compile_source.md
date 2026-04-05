@@ -24,6 +24,7 @@ Requirements:
 - Identify related concepts and entities that should be wikilinked
 - Only use [[wikilinks]] for concepts/entities that have existing pages in the wiki or that the editorial brief recommends for page creation. Mention others in plain text.
 - Note any contradictions flagged in the editorial brief
+- Add a `[coverage: low]` tag at the start of each major section (source summaries always have low coverage since they represent a single source)
 - Use slugified filenames: lowercase, hyphens, no special chars
 
 ## Existing Tags in This Wiki

@@ -249,6 +249,18 @@ dead-end files. After a report is generated:
 - Relevant concept and entity pages are updated to reference the report.
 - The report appears in `wiki/index.md` under the Reports section.
 
+## Coverage Indicators
+
+Every section in source summaries, concept articles, and entity pages should include
+a coverage tag indicating source depth:
+
+- `[coverage: high]` (5+ sources) — trust this section directly
+- `[coverage: medium]` (2-4 sources) — good overview, check raw sources for details
+- `[coverage: low]` (0-1 sources) — read the raw sources directly
+
+Place the tag on its own line at the start of each major section (Summary, Evidence,
+Key Claims, Across Sources, etc.).
+
 ## Writing Style
 
 - Be specific, not generic. "Achieves 95% accuracy on MMLU" over "performs well"

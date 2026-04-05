@@ -22,6 +22,7 @@ dependencies = [
     "openai>=1.0",
     "markitdown[all]>=0.1",
     "python-dotenv>=1.0",
+    "watchdog>=4.0",
     "pyyaml>=6.0",
 ]
 

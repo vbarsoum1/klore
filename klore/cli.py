@@ -130,22 +130,56 @@ def add(source: str):
 
 
 @cli.command()
+@click.argument("source")
+def ingest(source: str):
+    """Add a source and compile in one step."""
+    project_dir = _require_project()
+    raw_dir = project_dir / "raw"
+
+    from klore.ingester import ingest_file, ingest_url
+
+    # Add the source
+    if source.startswith("http://") or source.startswith("https://"):
+        path = ingest_url(source, raw_dir)
+        click.echo(f"Added URL → {path.relative_to(project_dir)}")
+    else:
+        source_path = Path(source).resolve()
+        if not source_path.exists():
+            click.echo(f"Error: {source} not found.", err=True)
+            sys.exit(1)
+        path = ingest_file(source_path, raw_dir)
+        click.echo(f"Added {source_path.name} → {path.relative_to(project_dir)}")
+
+    # Compile incrementally
+    from klore.compiler import compile_wiki
+
+    click.echo("Compiling...")
+    stats = asyncio.run(compile_wiki(project_dir, full=False))
+
+    click.echo(f"\nDone: {stats['sources_processed']} sources, "
+               f"{stats['concepts_generated']} concepts, "
+               f"{stats.get('entities_created', 0)} entities.")
+
+
+@cli.command()
 @click.option("--full", is_flag=True, help="Force full recompilation.")
-def compile(full: bool):
+@click.option("--topic", default=None, help="Recompile a specific concept only.")
+def compile(full: bool, topic: str | None):
     """Compile raw sources into the wiki."""
     project_dir = _require_project()
 
-    # Check for sources
-    raw_dir = project_dir / "raw"
-    sources = list(raw_dir.rglob("*"))
-    sources = [s for s in sources if s.is_file()]
-    if not sources:
-        click.echo("No sources found in raw/. Add some with `klore add`.", err=True)
-        sys.exit(1)
+    # Check for sources (skip check when topic-only compile uses existing summaries)
+    if not topic:
+        raw_dir = project_dir / "raw"
+        sources = list(raw_dir.rglob("*"))
+        sources = [s for s in sources if s.is_file()]
+        if not sources:
+            click.echo("No sources found in raw/. Add some with `klore add`.", err=True)
+            sys.exit(1)
 
     from klore.compiler import compile_wiki
 
-    stats = asyncio.run(compile_wiki(project_dir, full=full))
+    stats = asyncio.run(compile_wiki(project_dir, full=full, topic=topic))
 
     click.echo(f"\nCompilation complete:")
     click.echo(f"  Sources processed:  {stats['sources_processed']}")
@@ -156,6 +190,61 @@ def compile(full: bool):
         click.echo(f"  Sources skipped:    {stats['pass1_skipped']}")
     if stats.get("pass1_errors"):
         click.echo(f"  Errors:             {stats['pass1_errors']}")
+    if stats.get("total_tokens"):
+        click.echo(f"  Tokens used:        {stats['total_tokens']:,}")
+
+
+@cli.command()
+def watch():
+    """Watch raw/ for changes and auto-compile."""
+    project_dir = _require_project()
+    raw_dir = project_dir / "raw"
+
+    import time
+
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+
+    class _CompileHandler(FileSystemEventHandler):
+        def __init__(self):
+            self._pending = False
+            self._last_event = 0.0
+
+        def on_any_event(self, event):
+            if event.is_directory:
+                return
+            self._pending = True
+            self._last_event = time.time()
+
+    handler = _CompileHandler()
+    observer = Observer()
+    observer.schedule(handler, str(raw_dir), recursive=True)
+    observer.start()
+
+    click.echo(f"Watching {raw_dir} for changes... (Ctrl+C to stop)")
+
+    try:
+        while True:
+            time.sleep(1)
+            # Debounce: compile 2 seconds after last event
+            if handler._pending and (time.time() - handler._last_event) >= 2:
+                handler._pending = False
+                click.echo("\nChange detected, compiling...")
+                try:
+                    from klore.compiler import compile_wiki
+
+                    stats = asyncio.run(compile_wiki(project_dir, full=False))
+                    click.echo(
+                        f"Done: {stats['sources_processed']} sources, "
+                        f"{stats['concepts_generated']} concepts."
+                    )
+                except Exception as exc:
+                    click.echo(f"Compile error: {exc}", err=True)
+                click.echo("Watching for changes...")
+    except KeyboardInterrupt:
+        observer.stop()
+        click.echo("\nStopped.")
+    observer.join()
 
 
 @cli.command()

@@ -25,6 +25,7 @@ class CompileState:
         self.prompt_hash: str | None = None
         self.last_compiled: str | None = None
         self.compilation_count: int = 0
+        self.total_tokens_used: int = 0
 
     # ── Persistence ──────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ class CompileState:
             state.prompt_hash = data.get("prompt_hash")
             state.last_compiled = data.get("last_compiled")
             state.compilation_count = data.get("compilation_count", 0)
+            state.total_tokens_used = data.get("total_tokens_used", 0)
         return state
 
     def save(self, wiki_dir: Path) -> None:
@@ -56,6 +58,7 @@ class CompileState:
             "prompt_hash": self.prompt_hash,
             "last_compiled": self.last_compiled,
             "compilation_count": self.compilation_count,
+            "total_tokens_used": self.total_tokens_used,
         }
         (meta / STATE_FILENAME).write_text(
             json.dumps(data, indent=2) + "\n", encoding="utf-8"

@@ -1,0 +1,45 @@
+{
+  "name": "klore",
+  "version": "0.1.0",
+  "description": "LLM Wiki Knowledge Compiler — compile raw sources into an Obsidian-compatible wiki",
+  "commands": [
+    {
+      "name": "wiki-init",
+      "description": "Initialize a new klore knowledge base in the current directory",
+      "script": "commands/wiki-init.sh"
+    },
+    {
+      "name": "wiki-compile",
+      "description": "Compile raw sources into the wiki (incremental by default)",
+      "script": "commands/wiki-compile.sh"
+    },
+    {
+      "name": "wiki-ingest",
+      "description": "Add a source file/URL and compile in one step",
+      "script": "commands/wiki-ingest.sh"
+    },
+    {
+      "name": "wiki-ask",
+      "description": "Ask a question against the compiled wiki",
+      "script": "commands/wiki-ask.sh"
+    },
+    {
+      "name": "wiki-status",
+      "description": "Show compilation state and source counts",
+      "script": "commands/wiki-status.sh"
+    },
+    {
+      "name": "wiki-lint",
+      "description": "Run health checks on the compiled wiki",
+      "script": "commands/wiki-lint.sh"
+    },
+    {
+      "name": "wiki-watch",
+      "description": "Watch raw/ for changes and auto-compile",
+      "script": "commands/wiki-watch.sh"
+    }
+  ],
+  "hooks": {
+    "SessionStart": ["hooks/session-start.sh"]
+  }
+}
