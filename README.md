@@ -2,149 +2,85 @@
   <img src="klore-readme-banner.png" alt="Klore — LLM Knowledge Compiler" width="100%">
 </p>
 
-# Klore — LLM Wiki Knowledge Compiler
+<h3 align="center">Turn documents into a living wiki. One command. Any AI agent.</h3>
 
-> An implementation of [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), with autonomous editorial judgment.
+<p align="center">
+  <a href="https://pypi.org/project/klore/"><img src="https://img.shields.io/pypi/v/klore?color=blue" alt="PyPI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://github.com/vbarsoum1/llm-wiki-compiler/stargazers"><img src="https://img.shields.io/github/stars/vbarsoum1/llm-wiki-compiler?style=social" alt="Stars"></a>
+</p>
 
-**Raw sources in, living knowledge base out.** Available as a standalone CLI or a **Claude Code plugin**.
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude_Code-supported-blue" alt="Claude Code">
+  <img src="https://img.shields.io/badge/Cursor-supported-blue" alt="Cursor">
+  <img src="https://img.shields.io/badge/Windsurf-supported-blue" alt="Windsurf">
+  <img src="https://img.shields.io/badge/Codex-supported-blue" alt="Codex">
+  <img src="https://img.shields.io/badge/Copilot-supported-blue" alt="Copilot">
+</p>
 
-Drop PDFs, articles, and images into a folder. Klore compiles them into a structured, interlinked Obsidian-compatible wiki — then answers your questions using the compiled knowledge, not retrieved fragments.
+---
 
-**The thesis:** RAG retrieves fragments. Klore compiles knowledge. With 1M+ token context windows, the compiled wiki IS the index.
+**Klore compiles raw sources into a structured, interlinked [Obsidian](https://obsidian.md/)-compatible wiki.** Drop PDFs, articles, and URLs into a folder. Get a living knowledge base with concept pages, entity profiles, cross-references, and a continuously updated synthesis.
 
-Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), extended with a three-tier model architecture where a Director model (Opus) replaces the human editorial role — reading each source deeply, deciding what matters, identifying contradictions, and maintaining a living synthesis.
+Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), extended with a three-tier model architecture where a Director model replaces the human editorial role.
 
-## Getting Started
+## Why not RAG?
 
-### Option A: Claude Code Plugin (recommended)
+```
+RAG:     query → search chunks → answer → forget
+Klore:   sources → compile → wiki → query → save → richer wiki → better answers
+```
+
+RAG retrieves fragments at query time. Every question re-discovers the same relationships from scratch. Nothing accumulates.
+
+Klore **compiles** your sources into a wiki. Concepts get their own pages. Pages link to each other. When you ask a question with `--save`, the answer becomes a new page. Your knowledge compounds over time.
+
+**Before:** Read 3,200+ lines of raw files per session. **After:** Read the index + 2 topic articles (~330 lines). **90% context reduction.**
+
+## Quick Start
+
+### Install
 
 ```bash
-git clone https://github.com/vbarsoum1/llm-wiki-compiler.git
-pip install ./llm-wiki-compiler
-claude plugin marketplace add ./llm-wiki-compiler/klore/plugin
-claude plugin install klore
+pipx install klore    # or: pip install klore
 ```
 
-Then in Claude Code:
-```
-/wiki-init                    # Initialize a knowledge base
-/wiki-ingest paper.pdf        # Add a source and compile
-/wiki-ask "What are the key findings?"
-```
+### Set up your API key
 
-The plugin auto-injects your wiki's index into every Claude Code session. Your knowledge base becomes ambient context.
-
-### Option B: Standalone CLI
-
-```bash
-git clone https://github.com/vbarsoum1/llm-wiki-compiler.git
-cd llm-wiki-compiler
-pip install -e .
-```
-
-### 2. Get an API key
-
-Klore uses [OpenRouter](https://openrouter.ai) for LLM access. Get a free API key at https://openrouter.ai/keys, then:
+Klore uses [OpenRouter](https://openrouter.ai) for model access. One key, any model:
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-v1-your-key-here"
 ```
 
-### 3. Create a knowledge base
+### Build your first wiki
 
 ```bash
 klore init my-research
 cd my-research
-```
-
-This creates the directory structure: `raw/` for your sources, `wiki/` for the compiled output, and `.klore/` for config.
-
-### 4. Add sources
-
-Add any mix of local files and URLs:
-
-```bash
-# Local files (PDF, markdown, HTML, images, DOCX, etc.)
 klore add ~/papers/attention-is-all-you-need.pdf
-klore add ~/notes/research-notes.md
-
-# URLs (articles, blog posts, web pages)
 klore add https://en.wikipedia.org/wiki/Transformer_(deep_learning_model)
-```
-
-Check what you've added:
-```bash
-klore status
-```
-
-### 5. Compile the wiki
-
-```bash
 klore compile
 ```
 
-This runs the three-pass compiler: source extraction, tag normalization, concept synthesis, and index generation. You'll see progress output for each pass.
+Open `wiki/` in [Obsidian](https://obsidian.md/) and explore. Or just read the markdown.
 
-### 6. Browse the wiki
+## Agent Setup
 
-Open the `wiki/` folder in [Obsidian](https://obsidian.md/) as a vault. You'll see:
-- `wiki/sources/` — one summary per source with key claims and provenance
-- `wiki/concepts/` — synthesized concept articles linking multiple sources
-- `wiki/INDEX.md` — master index of everything
-- Graph view shows all the cross-links between concepts and sources
+Klore works with any AI coding agent. Run `bash setup.sh` to auto-configure all detected agents, or set up manually:
 
-Or just read the markdown files directly — they're plain `.md`.
+| Agent | Setup | How it works |
+|-------|-------|-------------|
+| **[Claude Code](https://claude.ai/code)** | `claude plugin marketplace add ./klore/plugin && claude plugin install klore` | `/wiki-init`, `/wiki-compile`, `/wiki-ask` slash commands + SessionStart hook |
+| **[Cursor](https://cursor.com)** | Open project in Cursor | Auto-loads `.cursor/rules/klore.mdc` |
+| **[Windsurf](https://windsurf.com)** | Open project in Windsurf | Auto-loads `.windsurf/rules/klore.md` via Cascade |
+| **[Codex (OpenAI)](https://openai.com/codex)** | Open project with Codex | Auto-loads `AGENTS.md` |
+| **[Gemini (Google)](https://aistudio.google.com)** | Open project with Gemini | Auto-loads `GEMINI.md` |
+| **[GitHub Copilot](https://github.com/features/copilot)** | Works automatically | Reads `.github/copilot-instructions.md` |
 
-### 7. Ask questions
+After setup, your agent can run klore commands directly. In Claude Code, use `/wiki-*` slash commands. In other agents, just ask: "compile the wiki" or "ingest this article".
 
-```bash
-klore ask "What are the key findings across these sources?"
-```
-
-The answer cites specific sources using `[[wikilinks]]`. Save an answer to the wiki:
-
-```bash
-klore ask --save "Compare the approaches described in these papers"
-```
-
-### 8. Keep it growing
-
-Add more sources anytime. Klore compiles incrementally — only new or changed sources are reprocessed:
-
-```bash
-klore add another-paper.pdf
-klore compile          # only processes the new file
-klore lint             # check for contradictions, broken links
-klore diff --since 1w  # see what changed in the wiki this week
-```
-
-## How it works
-
-Klore runs a director-driven compilation pipeline with three model tiers:
-
-| Tier | Default Model | Role |
-|------|--------------|------|
-| **Director** | `anthropic/claude-opus-4.6` | Editorial judgment — reads sources, decides what matters, reviews quality, maintains the living synthesis |
-| **Strong** | `google/gemini-3.1-pro-preview` | Concept synthesis, entity pages, Q&A answers |
-| **Fast** | `google/gemini-3-flash-preview` | Source extraction, tag normalization |
-
-### The compilation pipeline
-
-1. **Extract** (fast, concurrent): Each raw source is converted to markdown.
-
-2. **Editorial Brief** (director): The Director reads each source against the current wiki state and produces an editorial brief — what's important, what contradicts existing knowledge, what entities and concepts to create or update.
-
-3. **Tag Normalization** (fast): Synonym tags merged into canonical forms.
-
-4. **Build** (strong, concurrent): Source summaries, concept articles, and entity pages are written, guided by the Director's editorial briefs.
-
-5. **Review** (director): The Director reviews the changes for quality and accuracy.
-
-6. **Index & Log**: A single master index is generated. Every operation is appended to `wiki/log.md`.
-
-7. **Overview** (director): The Director updates `wiki/overview.md` — a living synthesis of the entire knowledge base.
-
-The wiki is Obsidian-compatible out of the box — `[[wikilinks]]`, backlinks, and graph view all work.
+The Claude Code plugin also injects your wiki's index into every session via a SessionStart hook, so your knowledge base becomes ambient context.
 
 ## Commands
 
@@ -164,67 +100,49 @@ klore status                 # Show source/concept counts, compilation state
 klore config set <key> <val> # Configure models, API key
 ```
 
-### Install as Claude Code Plugin
+## How It Works
 
-```bash
-# Clone the repo
-git clone https://github.com/vbarsoum1/llm-wiki-compiler.git
+Klore runs a 7-step director-driven compilation pipeline with three model tiers:
 
-# Install the CLI
-pipx install ./llm-wiki-compiler   # or: pip install ./llm-wiki-compiler
+| Tier | Default Model | Role |
+|------|--------------|------|
+| **Director** | Gemini 3 Flash (thinking) | Editorial judgment, quality review, synthesis |
+| **Strong** | Gemini 3.1 Pro | Concept pages, entity pages, Q&A |
+| **Fast** | Gemini 3 Flash | Source extraction, tag normalization |
 
-# Install the Claude Code plugin
-claude plugin marketplace add ./llm-wiki-compiler/klore/plugin
-claude plugin install klore
-```
+### The Pipeline
 
-Then in Claude Code: `/wiki-init`, `/wiki-compile`, `/wiki-ingest`, `/wiki-ask`, `/wiki-status`, `/wiki-lint`, `/wiki-watch`.
+1. **Extract** (fast, concurrent) — convert raw sources to markdown
+2. **Editorial Brief** (director) — read each source against wiki state, decide what matters, flag contradictions
+3. **Tag Normalize** (fast) — merge synonym tags into canonical forms
+4. **Build** (strong, concurrent) — write source summaries, concept articles, entity pages, guided by editorial briefs
+5. **Review** (director) — review changes for quality and accuracy
+6. **Index & Log** — generate master index with `[[wikilinks]]`, append to operation log
+7. **Overview** (director) — update `wiki/overview.md`, the living synthesis of the entire knowledge base
 
-The plugin auto-injects your wiki's index into every Claude Code session via a SessionStart hook.
-
-## Model Configuration
-
-Klore uses [OpenRouter](https://openrouter.ai) for model-agnostic LLM access. One API key, any model.
-
-| Tier | Default Model | Used for |
-|------|--------------|----------|
-| Director | `anthropic/claude-opus-4.6` | Editorial judgment, quality review, overview synthesis |
-| Strong | `google/gemini-3.1-pro-preview` | Concept synthesis, entity pages, Q&A, linting |
-| Fast | `google/gemini-3-flash-preview` | Source extraction, tag normalization |
-
-Override models:
-```bash
-klore config set model.director anthropic/claude-sonnet-4-6
-klore config set model.strong openai/gpt-4o
-klore config set model.fast google/gemini-2.5-flash
-```
+The Director model makes the editorial decisions that matter: what's significant, what contradicts existing knowledge, what deserves its own page, and what doesn't. This replaces the human-in-the-loop from Karpathy's original pattern.
 
 ## Cost
 
-Klore uses a three-tier model architecture to keep costs low. The expensive Director model (Opus) only handles editorial judgment. The bulk of the work (extraction, synthesis, indexing) runs on cheaper models.
+The three-tier architecture keeps costs low. The Director handles editorial judgment. The bulk of work runs on cheaper models.
 
-**OpenRouter pricing (per million tokens, as of April 2026):**
+| Sources | Est. Cost | Per Source |
+|---------|-----------|-----------|
+| 5 | ~$0.30 | ~$0.06 |
+| 10 | ~$0.60 | ~$0.06 |
+| 25 | ~$1.50 | ~$0.06 |
+| 50 | ~$3.00 | ~$0.06 |
 
-| Tier | Model | Input | Output |
-|------|-------|-------|--------|
-| Director | Claude Opus 4.6 | $5.00 | $25.00 |
-| Strong | Gemini 3.1 Pro | $2.00 | $12.00 |
-| Fast | Gemini 3 Flash | $0.50 | $3.00 |
+Real-world example: compiled a 57,000-word book (11 chapters) into 20 concept pages, 2 entity pages, and a full synthesis for ~$0.50 using Gemini Flash 3.0 with thinking mode.
 
-**Estimated cost per full compile:**
+Incremental compiles are cheaper. Adding one source to an existing wiki costs ~$0.05-0.10.
 
-| Sources | LLM Calls | Est. Cost | Per Source |
-|---------|-----------|-----------|-----------|
-| 5 | ~25 | ~$0.60 | ~$0.12 |
-| 10 | ~47 | ~$1.25 | ~$0.13 |
-| 25 | ~110 | ~$3.00 | ~$0.12 |
-| 50 | ~215 | ~$6.00 | ~$0.12 |
-
-**Incremental compiles are cheaper.** Adding one source to an existing wiki costs ~$0.15-$0.25 (skips unchanged sources, only rebuilds affected concepts).
-
-**Where the money goes:** For a 10-source compile, roughly 60% goes to the Director (briefs + reviews + overview), 39% to the Strong model (summaries + concepts + entities + index), and <1% to the Fast model (tag normalization).
-
-**Budget model:** Swap `model.director` to `anthropic/claude-sonnet-4-6` ($3/$15 per M tokens) to cut Director costs by 40%. Swap `model.strong` to `google/gemini-3-flash-preview` for another 75% savings on synthesis, with some quality tradeoff.
+Override models anytime:
+```bash
+klore config set model.director google/gemini-3-flash-preview:thinking
+klore config set model.strong google/gemini-3.1-pro-preview
+klore config set model.fast google/gemini-3-flash-preview
+```
 
 ## Architecture
 
@@ -235,35 +153,32 @@ my-research/
 │   ├── article.md
 │   └── diagram.png
 ├── wiki/                    # Compiled output (Obsidian-compatible)
-│   ├── index.md             # Master catalog (no wikilinks — navigation only)
-│   ├── log.md               # Append-only chronological record of all operations
-│   ├── overview.md          # Living synthesis — Director-maintained thesis
+│   ├── index.md             # Master catalog with [[wikilinks]]
+│   ├── log.md               # Append-only operation log
+│   ├── overview.md          # Living synthesis (Director-maintained)
 │   ├── sources/             # Per-source summaries
 │   ├── concepts/            # Synthesized concept articles
 │   ├── entities/            # Named entity pages (people, orgs, tech)
-│   ├── reports/             # Filed Q&A answers (feed back into wiki)
-│   └── _meta/               # Compilation state, link graph, lint reports
+│   └── reports/             # Filed Q&A answers (feed back into wiki)
 ├── .klore/
 │   ├── config.json          # Model and API configuration
-│   └── agents.md            # Wiki schema — controls how sources are compiled (editable)
+│   └── agents.md            # Wiki schema (editable)
 └── .git/                    # Auto-initialized, wiki changes tracked
 ```
 
-## Key design decisions
+## Design Decisions
 
-- **Director-driven.** A frontier model (Opus) plays the editorial role — deciding what matters, what contradicts, and what to investigate next. This replaces the human-in-the-loop from Karpathy's original pattern.
-- **No vector database.** No embeddings. No RAG. The compiled wiki is loaded directly into the LLM's context window.
-- **Index-first queries.** Q&A reads the index to find relevant pages, then drills in — instead of loading everything. Scales to hundreds of sources.
-- **Entity pages.** Named entities (people, orgs, technologies) get their own pages alongside concept articles, creating a rich relational graph.
-- **Living synthesis.** `wiki/overview.md` is a continuously updated thesis about what the knowledge base means, taken as a whole.
-- **Chronological log.** Every operation is logged in `wiki/log.md` — parseable with `grep "^## \[" log.md`.
-- **Reports compound.** Q&A answers filed back into the wiki update concept and entity pages — knowledge compounds.
-- **Obsidian-native.** The wiki is a folder of `.md` files with `[[wikilinks]]`. Open it in Obsidian for graph view, backlinks, and search.
-- **Incremental compilation.** Only new or changed sources are reprocessed. Prompt changes trigger automatic full recompile.
-- **Git-tracked.** Every compilation auto-commits the wiki. `klore diff` shows how your knowledge base evolved.
-- **Model-agnostic.** Any OpenRouter model works. Swap models with one config change.
+- **Director-driven.** A frontier model plays editor, deciding what matters and what contradicts. No human-in-the-loop required.
+- **No vector database.** No embeddings. No RAG. The compiled wiki loads directly into the LLM context window.
+- **Entity pages.** People, organizations, and technologies get their own pages, creating a rich relational graph.
+- **Living synthesis.** `wiki/overview.md` is continuously updated as sources are added.
+- **Reports compound.** Q&A answers filed back into the wiki update concept pages. Knowledge compounds.
+- **Obsidian-native.** Plain `.md` files with `[[wikilinks]]`. Graph view, backlinks, and search all work.
+- **Incremental.** Only new or changed sources are reprocessed. Prompt changes trigger full recompile.
+- **Git-tracked.** Every compilation auto-commits. `klore diff` shows how knowledge evolved.
+- **Model-agnostic.** Any OpenRouter model. Swap with one config change.
 
-## Inspired by
+## Inspired By
 
 [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — extended with autonomous editorial judgment via a three-tier model architecture.
 

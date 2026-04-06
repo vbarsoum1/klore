@@ -5,17 +5,24 @@ build-backend = "hatchling.build"
 [project]
 name = "klore"
 version = "0.1.0"
-description = "LLM Knowledge Compiler — raw sources in, living knowledge base out"
+description = "Compile documents into a living Obsidian wiki. Based on Karpathy's LLM Wiki pattern."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-authors = [{ name = "klore contributors" }]
-keywords = ["llm", "llm-wiki", "knowledge-base", "wiki", "compiler", "obsidian", "karpathy"]
+authors = [{ name = "Victor Barsoum" }]
+keywords = [
+    "llm", "llm-wiki", "knowledge-base", "wiki", "compiler", "obsidian",
+    "karpathy", "rag-alternative", "knowledge-management", "pkm",
+    "second-brain", "ai-agents", "claude-code", "cursor", "windsurf",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
 ]
 dependencies = [
     "click>=8.0",
@@ -31,3 +38,5 @@ klore = "klore.cli:cli"
 
 [project.urls]
 Homepage = "https://github.com/vbarsoum1/llm-wiki-compiler"
+Repository = "https://github.com/vbarsoum1/llm-wiki-compiler"
+Issues = "https://github.com/vbarsoum1/llm-wiki-compiler/issues"
