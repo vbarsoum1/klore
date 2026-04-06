@@ -249,6 +249,8 @@ def _llm_call_sync(
     _max_retries: int = 3,
 ) -> str:
     """Synchronous LLM call via the OpenAI SDK with retry on transient failures."""
+    from openai import NotFoundError, AuthenticationError
+
     for attempt in range(_max_retries):
         try:
             response = client.chat.completions.create(
@@ -263,6 +265,17 @@ def _llm_call_sync(
             if not response.choices:
                 raise RuntimeError(f"LLM returned empty response for model {model}")
             return response.choices[0].message.content or ""
+        except NotFoundError:
+            raise RuntimeError(
+                f"Model '{model}' not found on OpenRouter.\n"
+                f"Check the model name at https://openrouter.ai/models\n"
+                f"Fix: klore config set model.director <valid-model-id>"
+            )
+        except AuthenticationError:
+            raise RuntimeError(
+                "OpenRouter API key is invalid or expired.\n"
+                "Get a new key at: https://openrouter.ai/keys"
+            )
         except Exception:
             if attempt == _max_retries - 1:
                 raise

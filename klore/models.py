@@ -14,12 +14,11 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODELS: dict[str, str] = {
     "fast": "google/gemini-3-flash-preview",
     "strong": "google/gemini-3.1-pro-preview",
-    "director": "google/gemini-3-flash-preview:thinking",
+    "director": "google/gemini-3-flash-preview",
 }
 
 CONTEXT_LIMITS: dict[str, int] = {
     "google/gemini-3-flash-preview": 1_048_576,
-    "google/gemini-3-flash-preview:thinking": 1_048_576,
     "google/gemini-3.1-pro-preview": 1_048_576,
     "google/gemini-2.5-flash": 1_048_576,
     "google/gemini-2.5-pro": 1_048_576,
@@ -56,9 +55,12 @@ def _resolve_api_key(project_dir: Path) -> str:
         return key
 
     raise RuntimeError(
-        "No OpenRouter API key found. "
-        "Set the OPENROUTER_API_KEY environment variable or add "
-        '"api_key" to .klore/config.json.'
+        "No OpenRouter API key found.\n\n"
+        "Fix: set the key in one of these places:\n"
+        "  1. export OPENROUTER_API_KEY=\"sk-or-v1-...\"\n"
+        "  2. Add \"api_key\": \"sk-or-v1-...\" to .klore/config.json\n"
+        "  3. Create a .env.local file with OPENROUTER_API_KEY=sk-or-v1-...\n\n"
+        "Get a key at: https://openrouter.ai/keys"
     )
 
 

@@ -106,7 +106,7 @@ Klore runs a 7-step director-driven compilation pipeline with three model tiers:
 
 | Tier | Default Model | Role |
 |------|--------------|------|
-| **Director** | Gemini 3 Flash (thinking) | Editorial judgment, quality review, synthesis |
+| **Director** | Gemini 3 Flash | Editorial judgment, quality review, synthesis |
 | **Strong** | Gemini 3.1 Pro | Concept pages, entity pages, Q&A |
 | **Fast** | Gemini 3 Flash | Source extraction, tag normalization |
 
