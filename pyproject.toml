@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "klore"
-version = "0.1.0"
+version = "0.1.1"
 description = "Compile documents into a living Obsidian wiki. Based on Karpathy's LLM Wiki pattern."
 readme = "README.md"
 license = "MIT"

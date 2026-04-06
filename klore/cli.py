@@ -305,11 +305,12 @@ def watch():
     observer.join()
 
 
-@cli.command()
-@click.argument("question")
+@cli.command(context_settings={"ignore_unknown_options": True})
+@click.argument("question", nargs=-1, required=True)
 @click.option("--save", is_flag=True, help="Save the answer to wiki/reports/.")
-def ask(question: str, save: bool):
+def ask(question: tuple[str, ...], save: bool):
     """Ask a question against the compiled wiki."""
+    question = " ".join(question)
     project_dir = _require_project()
 
     wiki_dir = project_dir / "wiki"
