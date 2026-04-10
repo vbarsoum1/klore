@@ -9,7 +9,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from klore.compiler import _TokenTracker, compile_wiki
+from klore.compiler import (
+    _TokenTracker,
+    _collect_entities_from_briefs,
+    _collect_related_reports,
+    _remove_raw_source_outputs,
+    compile_wiki,
+)
+from klore.state import CompileState
 
 
 # ── Token Tracking ──────────────────────────────────────────────────
@@ -208,3 +215,77 @@ class TestTopicCompile:
 
         # Token stats should be present
         assert stats["total_tokens"] >= 0
+
+
+# ── Source Identity / Removal ───────────────────────────────────────
+
+
+class TestSourceIdentityAndRemoval:
+
+    def test_entities_use_chunk_summary_slugs(self, tmp_path: Path):
+        briefs = [{
+            "pages": [{
+                "name": "Acme System",
+                "slug": "acme-system",
+                "page_type": "entity",
+                "entity_type": "technology",
+                "action": "create",
+                "significance": "high",
+                "justification": "Discussed in depth.",
+            }]
+        }]
+        extractions = [{
+            "filename": "book - Chapter 1",
+            "parent_filename": "book.md",
+            "chunk_index": 1,
+            "file_path": tmp_path / "raw" / "book.md",
+        }]
+
+        entities = _collect_entities_from_briefs(briefs, extractions)
+
+        assert entities["acme-system"]["source_slugs"] == ["book-ch01"]
+
+    def test_remove_raw_source_outputs_removes_summaries_and_mappings(
+        self, tmp_path: Path
+    ):
+        wiki = tmp_path / "wiki"
+        sources = wiki / "sources"
+        sources.mkdir(parents=True)
+        (sources / "book.md").write_text("# Book", encoding="utf-8")
+        (sources / "book-ch01.md").write_text("# Chapter", encoding="utf-8")
+        (sources / "other.md").write_text("# Other", encoding="utf-8")
+
+        state = CompileState()
+        state.file_hashes = {
+            "raw/book.md": "old",
+            "raw/other.md": "keep",
+        }
+        state.concept_sources = {
+            "shared": ["book", "other"],
+            "chapter-only": ["book-ch01"],
+        }
+        state.entity_sources = {"entity": ["book-ch01", "other"]}
+
+        removed = _remove_raw_source_outputs(wiki, state, [Path("raw/book.md")])
+
+        assert removed == 2
+        assert not (sources / "book.md").exists()
+        assert not (sources / "book-ch01.md").exists()
+        assert (sources / "other.md").exists()
+        assert "raw/book.md" not in state.file_hashes
+        assert state.concept_sources == {"shared": ["other"]}
+        assert state.entity_sources == {"entity": ["other"]}
+
+    def test_collect_related_reports_by_concept_tag(self, tmp_path: Path):
+        wiki = tmp_path / "wiki"
+        reports = wiki / "reports"
+        reports.mkdir(parents=True)
+        report = reports / "what-is-ml.md"
+        report.write_text(
+            '---\ntitle: "What is ML?"\ntype: report\n'
+            'tags: ["machine-learning"]\n---\n'
+            "# What is ML?\n\nSaved answer.",
+            encoding="utf-8",
+        )
+
+        assert _collect_related_reports(wiki, "machine-learning") == [report]

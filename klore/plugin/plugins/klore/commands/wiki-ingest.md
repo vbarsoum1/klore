@@ -9,7 +9,7 @@ allowed-tools: [Bash]
 Run the following command to add a source and compile:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/commands/_check-klore.sh" && klore ingest $ARGUMENTS
+source "${CLAUDE_PLUGIN_ROOT}/commands/_check-klore.sh" && klore ingest "$ARGUMENTS"
 ```
 
 If klore is not installed, tell the user to install it with `pipx install klore`.

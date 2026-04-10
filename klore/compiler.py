@@ -14,14 +14,19 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import click
-import yaml
 
+from klore.compile_support import WIKILINK_RE
+from klore.compile_support import collect_related_reports as _collect_related_reports
+from klore.compile_support import page_recommendations as _page_recommendations
+from klore.compile_support import parse_frontmatter as _parse_frontmatter
+from klore.compile_support import remove_raw_source_outputs as _remove_raw_source_outputs
+from klore.compile_support import source_summary_slug as _source_summary_slug
+from klore.compile_types import EditorialBrief, Extraction
 from klore.git import git_add_and_commit
 from klore.hash import hash_file, hash_string
 from klore.ingester import (
@@ -30,43 +35,18 @@ from klore.ingester import (
     convert_to_markdown,
     slugify,
 )
+from klore.llm import TokenTracker as _TokenTracker
+from klore.llm import llm_call as _llm_call
 from klore.log import append_log, read_recent_log
 from klore.models import get_client, get_model
 from klore.state import CompileState
+from klore.text import fill_prompt as _fill_prompt
+from klore.text import strip_code_fences as _strip_code_fences
 
 # ── Paths & constants ────────────────────────────────────────────────
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 SEMAPHORE_LIMIT = 5
-
-
-# ── Token tracking ──────────────────────────────────────────────────
-
-
-class _TokenTracker:
-    """Accumulates token usage across multiple LLM calls."""
-
-    def __init__(self):
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-
-    def add(self, usage):
-        if usage:
-            try:
-                val = getattr(usage, 'prompt_tokens', 0)
-                self.prompt_tokens += int(val) if val else 0
-            except (TypeError, ValueError):
-                pass
-            try:
-                val = getattr(usage, 'completion_tokens', 0)
-                self.completion_tokens += int(val) if val else 0
-            except (TypeError, ValueError):
-                pass
-
-    @property
-    def total_tokens(self):
-        return self.prompt_tokens + self.completion_tokens
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -75,17 +55,6 @@ class _TokenTracker:
 def _read_prompt(name: str) -> str:
     """Read a prompt template from the prompts directory."""
     return (PROMPTS_DIR / name).read_text("utf-8")
-
-
-def _fill_prompt(template: str, **kwargs: str) -> str:
-    """Replace {key} placeholders without Python's format() brace conflicts.
-
-    Unlike str.format(), this doesn't choke on JSON braces in prompt templates.
-    """
-    result = template
-    for key, value in kwargs.items():
-        result = result.replace(f"{{{key}}}", str(value))
-    return result
 
 
 def _read_agents_md(project_dir: Path) -> str:
@@ -102,17 +71,6 @@ def _compute_prompt_hash(agents_md: str) -> str:
     for p in sorted(PROMPTS_DIR.glob("*.md")):
         parts.append(p.read_text("utf-8"))
     return hash_string("\n".join(parts))
-
-
-def _parse_frontmatter(markdown: str) -> dict[str, Any]:
-    """Extract YAML frontmatter from a markdown string."""
-    parts = markdown.split("---", 2)
-    if len(parts) < 3:
-        return {}
-    try:
-        return yaml.safe_load(parts[1]) or {}
-    except yaml.YAMLError:
-        return {}
 
 
 def _validate_source_output(text: str) -> bool:
@@ -218,82 +176,12 @@ def _read_index(wiki_dir: Path) -> str:
     return ""
 
 
-def _strip_code_fences(text: str) -> str:
-    """Strip wrapping ```markdown ... ``` fences from LLM output."""
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        first_nl = stripped.index("\n") if "\n" in stripped else len(stripped)
-        stripped = stripped[first_nl + 1:]
-    if stripped.endswith("```"):
-        stripped = stripped[:-3]
-    return stripped.strip()
-
-
 def _atomic_write(path: Path, content: str) -> None:
     """Write content to a file atomically via tmp + rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(content, encoding="utf-8")
     tmp.rename(path)
-
-
-# ── LLM call wrapper ────────────────────────────────────────────────
-
-
-def _llm_call_sync(
-    client: Any,
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    tracker: _TokenTracker | None = None,
-    _max_retries: int = 3,
-) -> str:
-    """Synchronous LLM call via the OpenAI SDK with retry on transient failures."""
-    from openai import NotFoundError, AuthenticationError
-
-    for attempt in range(_max_retries):
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-            )
-            if tracker and hasattr(response, 'usage'):
-                tracker.add(response.usage)
-            if not response.choices:
-                raise RuntimeError(f"LLM returned empty response for model {model}")
-            return response.choices[0].message.content or ""
-        except NotFoundError:
-            raise RuntimeError(
-                f"Model '{model}' not found on OpenRouter.\n"
-                f"Check the model name at https://openrouter.ai/models\n"
-                f"Fix: klore config set model.director <valid-model-id>"
-            )
-        except AuthenticationError:
-            raise RuntimeError(
-                "OpenRouter API key is invalid or expired.\n"
-                "Get a new key at: https://openrouter.ai/keys"
-            )
-        except Exception:
-            if attempt == _max_retries - 1:
-                raise
-            time.sleep(2 ** attempt)
-    raise RuntimeError("unreachable")
-
-
-async def _llm_call(
-    client: Any,
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    tracker: _TokenTracker | None = None,
-) -> str:
-    """Async wrapper: run the synchronous OpenAI client in a thread."""
-    return await asyncio.to_thread(
-        _llm_call_sync, client, model, system_prompt, user_prompt, tracker
-    )
 
 
 # ── Step 1: Extract ─────────────────────────────────────────────────
@@ -303,7 +191,7 @@ async def _extract_source(
     file_path: Path,
     project_dir: Path,
     semaphore: asyncio.Semaphore,
-) -> list[dict[str, Any]]:
+) -> list[Extraction]:
     """Convert a single source file to markdown, chunking large documents.
 
     Returns a list of extraction dicts. Usually one item, but large documents
@@ -360,20 +248,42 @@ async def _step1_extract(
     raw_dir: Path,
     state: CompileState,
     full: bool,
-) -> tuple[list[dict[str, Any]], int, int]:
+) -> tuple[list[Extraction], int, int, int]:
     """Step 1: Extract raw files to markdown.
 
-    Returns (extractions, skipped_count, error_count).
+    Returns (extractions, skipped_count, error_count, removed_count).
     """
+    removed_count = 0
     if full:
+        _new, _changed, removed = state.diff_sources(raw_dir)
+        if removed:
+            removed_count = _remove_raw_source_outputs(
+                wiki_dir=project_dir / "wiki",
+                state=state,
+                removed_sources=removed,
+            )
+            click.echo(
+                f"Step 1 (Extract): removed {removed_count} stale source summaries.",
+                err=True,
+            )
         sources = sorted(p for p in raw_dir.rglob("*") if p.is_file())
     else:
-        new, changed, _removed = state.diff_sources(raw_dir)
+        new, changed, removed = state.diff_sources(raw_dir)
+        if removed:
+            removed_count = _remove_raw_source_outputs(
+                wiki_dir=project_dir / "wiki",
+                state=state,
+                removed_sources=removed,
+            )
+            click.echo(
+                f"Step 1 (Extract): removed {removed_count} stale source summaries.",
+                err=True,
+            )
         sources = sorted([project_dir / p for p in new + changed])
 
     if not sources:
         click.echo("Step 1 (Extract): no sources to process.", err=True)
-        return [], 0, 0
+        return [], 0, 0, removed_count
 
     click.echo(f"Step 1 (Extract): converting {len(sources)} sources...", err=True)
 
@@ -382,7 +292,7 @@ async def _step1_extract(
     results = await asyncio.gather(*tasks)
 
     # Flatten: each source returns a list (usually 1 item, more if chunked)
-    extractions: list[dict[str, Any]] = []
+    extractions: list[Extraction] = []
     errors = 0
     for result in results:
         if result:
@@ -394,13 +304,13 @@ async def _step1_extract(
         f"Step 1 (Extract): done — {len(extractions)} extracted, {errors} errors.",
         err=True,
     )
-    return extractions, 0, errors
+    return extractions, 0, errors, removed_count
 
 
 # ── Step 2: Editorial Brief ─────────────────────────────────────────
 
 
-def _default_brief(filename: str) -> dict[str, Any]:
+def _default_brief(filename: str) -> EditorialBrief:
     """Return a minimal default editorial brief when JSON parsing fails."""
     return {
         "summary": f"Source file: {filename}",
@@ -418,14 +328,14 @@ def _default_brief(filename: str) -> dict[str, Any]:
 
 
 async def _get_editorial_brief(
-    extraction: dict[str, Any],
+    extraction: Extraction,
     wiki_dir: Path,
     client: Any,
     director_model: str,
     agents_md: str,
     semaphore: asyncio.Semaphore,
     tracker: _TokenTracker | None = None,
-) -> dict[str, Any]:
+) -> EditorialBrief:
     """Call Director to produce an editorial brief for a single extraction."""
     async with semaphore:
         index_content = _read_index(wiki_dir)
@@ -480,13 +390,13 @@ async def _get_editorial_brief(
 
 
 async def _step2_editorial_briefs(
-    extractions: list[dict[str, Any]],
+    extractions: list[Extraction],
     wiki_dir: Path,
     project_dir: Path,
     client: Any,
     agents_md: str,
     tracker: _TokenTracker | None = None,
-) -> list[dict[str, Any]]:
+) -> list[EditorialBrief]:
     """Step 2: Get editorial briefs from the Director for each extraction."""
     if not extractions:
         return []
@@ -582,8 +492,8 @@ async def _step3_normalize_tags(
 
 
 async def _build_source_summary(
-    extraction: dict[str, Any],
-    brief: dict[str, Any],
+    extraction: Extraction,
+    brief: EditorialBrief,
     wiki_dir: Path,
     project_dir: Path,
     client: Any,
@@ -642,10 +552,7 @@ async def _build_source_summary(
                 return False
 
         # Write atomically to wiki/sources/{slug}.md
-        # For chunked documents, use the chunk filename for a unique slug
-        slug = slugify(extraction.get("parent_filename", filename).rsplit(".", 1)[0])
-        if "chunk_index" in extraction:
-            slug = f"{slug}-ch{extraction['chunk_index']:02d}"
+        slug = _source_summary_slug(extraction)
         dest = wiki_dir / "sources" / f"{slug}.md"
         _atomic_write(dest, _strip_code_fences(output))
 
@@ -657,8 +564,8 @@ async def _build_source_summary(
 
 
 async def _step4a_source_summaries(
-    extractions: list[dict[str, Any]],
-    briefs: list[dict[str, Any]],
+    extractions: list[Extraction],
+    briefs: list[EditorialBrief],
     wiki_dir: Path,
     project_dir: Path,
     client: Any,
@@ -701,8 +608,8 @@ async def _step4a_source_summaries(
 
 
 def _collect_entities_from_briefs(
-    briefs: list[dict[str, Any]],
-    extractions: list[dict[str, Any]],
+    briefs: list[EditorialBrief],
+    extractions: list[Extraction],
 ) -> dict[str, dict[str, Any]]:
     """Collect entity recommendations from editorial briefs.
 
@@ -715,14 +622,7 @@ def _collect_entities_from_briefs(
     entities: dict[str, dict[str, Any]] = {}
 
     for brief, extraction in zip(briefs, extractions):
-        # Collect from unified pages array (new) + entities array (backward compat)
-        entity_list: list[dict[str, Any]] = []
-        for page_info in brief.get("pages", []):
-            if page_info.get("page_type") == "entity":
-                entity_list.append(page_info)
-        entity_list.extend(brief.get("entities", []))
-
-        for entity_info in entity_list:
+        for entity_info in _page_recommendations(brief, page_type="entity"):
             # Filter: skip items the Director marked as skip or low significance
             if entity_info.get("action") == "skip":
                 continue
@@ -748,7 +648,7 @@ def _collect_entities_from_briefs(
             if reason:
                 entities[slug]["reasons"].append(reason)
             entities[slug]["source_filenames"].append(extraction["filename"])
-            source_slug = slugify(extraction["file_path"].stem)
+            source_slug = _source_summary_slug(extraction)
             if source_slug not in entities[slug]["source_slugs"]:
                 entities[slug]["source_slugs"].append(source_slug)
 
@@ -857,8 +757,8 @@ async def _build_entity_page(
 
 
 async def _step4b_entity_pages(
-    briefs: list[dict[str, Any]],
-    extractions: list[dict[str, Any]],
+    briefs: list[EditorialBrief],
+    extractions: list[Extraction],
     wiki_dir: Path,
     client: Any,
     project_dir: Path,
@@ -937,6 +837,10 @@ async def _build_concept_page(
             summaries.append(f"### {sf.stem}\n\n{content}")
             source_slugs.append(sf.stem)
 
+        for report_file in _collect_related_reports(wiki_dir, concept_slug):
+            content = report_file.read_text("utf-8")
+            summaries.append(f"### Filed report: {report_file.stem}\n\n{content}")
+
         source_summaries = "\n\n---\n\n".join(summaries)
 
         # Check for existing article
@@ -999,7 +903,7 @@ async def _step4c_concept_pages(
     agents_md: str,
     state: CompileState,
     aliases: dict[str, str],
-    briefs: list[dict[str, Any]] | None = None,
+    briefs: list[EditorialBrief] | None = None,
     tracker: _TokenTracker | None = None,
 ) -> int:
     """Step 4c: Synthesize concept articles.
@@ -1017,12 +921,7 @@ async def _step4c_concept_pages(
     # Collect Director-recommended concepts from briefs
     recommended: dict[str, dict[str, Any]] = {}
     for brief in (briefs or []):
-        # Read from unified pages array (new) + concepts array (backward compat)
-        concept_list: list[dict[str, Any]] = []
-        for page_info in brief.get("pages", []):
-            if page_info.get("page_type") == "concept":
-                concept_list.append(page_info)
-        concept_list.extend(brief.get("concepts", []))
+        concept_list = _page_recommendations(brief, page_type="concept")
 
         for concept_info in concept_list:
             if concept_info.get("action") == "skip":
@@ -1054,7 +953,7 @@ async def _step4c_concept_pages(
             # Scan all source summaries as fallback
             matching = sorted(sources_dir.glob("*.md")) if sources_dir.is_dir() else []
         if matching:
-            eligible[tag_key] = matching
+            eligible[slug] = matching
 
     if not eligible:
         click.echo(
@@ -1094,8 +993,8 @@ async def _step4c_concept_pages(
 
 
 async def _step5_review(
-    extractions: list[dict[str, Any]],
-    briefs: list[dict[str, Any]],
+    extractions: list[Extraction],
+    briefs: list[EditorialBrief],
     wiki_dir: Path,
     project_dir: Path,
     client: Any,
@@ -1121,11 +1020,11 @@ async def _step5_review(
     semaphore = asyncio.Semaphore(SEMAPHORE_LIMIT)
 
     async def _review_one(
-        extraction: dict[str, Any],
-        brief: dict[str, Any],
+        extraction: Extraction,
+        brief: EditorialBrief,
     ) -> dict[str, Any]:
         async with semaphore:
-            slug = slugify(extraction["file_path"].stem)
+            slug = _source_summary_slug(extraction)
 
             # Read source summary
             source_file = wiki_dir / "sources" / f"{slug}.md"
@@ -1135,7 +1034,7 @@ async def _step5_review(
 
             # Gather entity pages from this brief
             entity_pages_parts: list[str] = []
-            for entity_info in brief.get("entities", []):
+            for entity_info in _page_recommendations(brief, page_type="entity"):
                 entity_slug = entity_info.get(
                     "slug", slugify(entity_info.get("name", ""))
                 )
@@ -1232,8 +1131,8 @@ async def _step6_index_and_log(
     project_dir: Path,
     client: Any,
     agents_md: str,
-    extractions: list[dict[str, Any]],
-    briefs: list[dict[str, Any]],
+    extractions: list[Extraction],
+    briefs: list[EditorialBrief],
     reviews: list[dict[str, Any]],
     sources_processed: int,
     entities_created: int,
@@ -1295,18 +1194,18 @@ async def _step6_index_and_log(
     # Append log entries for each source processed
     for ext, brief, review in zip(extractions, briefs, reviews):
         filename = ext["filename"]
-        slug = slugify(ext["file_path"].stem)
+        slug = _source_summary_slug(ext)
 
         # Collect pages touched by this source
         pages_touched = [f"sources/{slug}.md"]
-        for entity_info in brief.get("entities", []):
+        for entity_info in _page_recommendations(brief, page_type="entity"):
             entity_slug = entity_info.get(
                 "slug", slugify(entity_info.get("name", ""))
             )
             if entity_slug:
                 pages_touched.append(f"entities/{entity_slug}.md")
 
-        entity_count_for_source = len(brief.get("entities", []))
+        entity_count_for_source = len(_page_recommendations(brief, page_type="entity"))
         details = (
             f"Created source summary for {filename}. "
             f"Entities: {entity_count_for_source}."
@@ -1469,6 +1368,7 @@ async def compile_wiki(
                 "tags_normalized": 0,
                 "pass1_skipped": 0,
                 "pass1_errors": 0,
+                "sources_removed": 0,
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,
@@ -1513,6 +1413,7 @@ async def compile_wiki(
             "tags_normalized": 0,
             "pass1_skipped": 0,
             "pass1_errors": 0,
+            "sources_removed": 0,
             "prompt_tokens": tracker.prompt_tokens,
             "completion_tokens": tracker.completion_tokens,
             "total_tokens": tracker.total_tokens,
@@ -1529,7 +1430,7 @@ async def compile_wiki(
     state.set_prompt_hash(prompt_hash)
 
     # ── Step 1: Extract ──────────────────────────────────────────
-    extractions, pass1_skipped, pass1_errors = await _step1_extract(
+    extractions, pass1_skipped, pass1_errors, sources_removed = await _step1_extract(
         project_dir, raw_dir, state, full
     )
 
@@ -1608,6 +1509,7 @@ async def compile_wiki(
         "tags_normalized": tags_normalized,
         "pass1_skipped": pass1_skipped,
         "pass1_errors": pass1_errors,
+        "sources_removed": sources_removed,
         "prompt_tokens": tracker.prompt_tokens,
         "completion_tokens": tracker.completion_tokens,
         "total_tokens": tracker.total_tokens,

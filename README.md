@@ -106,9 +106,9 @@ Klore runs a 7-step director-driven compilation pipeline with three model tiers:
 
 | Tier | Default Model | Role |
 |------|--------------|------|
-| **Director** | Gemini 3 Flash | Editorial judgment, quality review, synthesis |
-| **Strong** | Gemini 3.1 Pro | Concept pages, entity pages, Q&A |
-| **Fast** | Gemini 3 Flash | Source extraction, tag normalization |
+| **Director** | Gemini 3.0 Flash Preview | Editorial judgment, quality review, synthesis |
+| **Strong** | Gemini 3.0 Flash Preview | Concept pages, entity pages, Q&A |
+| **Fast** | Gemini 3.0 Flash Preview | Source extraction, tag normalization |
 
 ### The Pipeline
 
@@ -133,14 +133,14 @@ The three-tier architecture keeps costs low. The Director handles editorial judg
 | 25 | ~$1.50 | ~$0.06 |
 | 50 | ~$3.00 | ~$0.06 |
 
-Real-world example: compiled a 57,000-word book (11 chapters) into 20 concept pages, 2 entity pages, and a full synthesis for ~$0.50 using Gemini Flash 3.0 with thinking mode.
+Real-world example: compiled a 57,000-word book (11 chapters) into 20 concept pages, 2 entity pages, and a full synthesis for ~$0.50 using Gemini Flash 3.0.
 
 Incremental compiles are cheaper. Adding one source to an existing wiki costs ~$0.05-0.10.
 
 Override models anytime:
 ```bash
-klore config set model.director google/gemini-3-flash-preview:thinking
-klore config set model.strong google/gemini-3.1-pro-preview
+klore config set model.director google/gemini-3-flash-preview
+klore config set model.strong google/gemini-3-flash-preview
 klore config set model.fast google/gemini-3-flash-preview
 ```
 
@@ -172,7 +172,7 @@ my-research/
 - **No vector database.** No embeddings. No RAG. The compiled wiki loads directly into the LLM context window.
 - **Entity pages.** People, organizations, and technologies get their own pages, creating a rich relational graph.
 - **Living synthesis.** `wiki/overview.md` is continuously updated as sources are added.
-- **Reports compound.** Q&A answers filed back into the wiki update concept pages. Knowledge compounds.
+- **Reports compound.** Q&A answers filed with `klore ask --save` are tagged with related concept pages and included in future concept synthesis. Knowledge compounds.
 - **Obsidian-native.** Plain `.md` files with `[[wikilinks]]`. Graph view, backlinks, and search all work.
 - **Incremental.** Only new or changed sources are reprocessed. Prompt changes trigger full recompile.
 - **Git-tracked.** Every compilation auto-commits. `klore diff` shows how knowledge evolved.

@@ -13,7 +13,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 DEFAULT_MODELS: dict[str, str] = {
     "fast": "google/gemini-3-flash-preview",
-    "strong": "google/gemini-3.1-pro-preview",
+    "strong": "google/gemini-3-flash-preview",
     "director": "google/gemini-3-flash-preview",
 }
 

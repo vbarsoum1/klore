@@ -78,10 +78,11 @@ def init(name: str):
     if not agents_dest.exists():
         agents_dest.write_text(template.read_text("utf-8"), encoding="utf-8")
     config_path = config_dir / "config.json"
+    config_data: dict = {}
     if not config_path.exists():
         from klore.models import DEFAULT_MODELS
 
-        config_data: dict = {
+        config_data = {
             "model": dict(DEFAULT_MODELS),
             "api_key": None,
         }
@@ -102,6 +103,11 @@ def init(name: str):
             json.dumps(config_data, indent=2) + "\n",
             encoding="utf-8",
         )
+    else:
+        try:
+            config_data = json.loads(config_path.read_text("utf-8"))
+        except json.JSONDecodeError:
+            config_data = {}
 
     # Initialize git
     from klore.git import git_init
@@ -246,6 +252,8 @@ def compile(full: bool, topic: str | None):
     click.echo(f"  Tags normalized:    {stats['tags_normalized']}")
     if stats.get("pass1_skipped"):
         click.echo(f"  Sources skipped:    {stats['pass1_skipped']}")
+    if stats.get("sources_removed"):
+        click.echo(f"  Sources removed:    {stats['sources_removed']}")
     if stats.get("pass1_errors"):
         click.echo(f"  Errors:             {stats['pass1_errors']}")
     if stats.get("total_tokens"):

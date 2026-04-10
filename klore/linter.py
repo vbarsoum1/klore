@@ -21,6 +21,7 @@ from klore.hash import hash_file
 from klore.log import append_log, read_recent_log
 from klore.models import get_client, get_model
 from klore.state import CompileState
+from klore.text import strip_code_fences as _strip_code_fences
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 WIKI_SUBDIRS = ["sources", "concepts", "entities", "reports"]
@@ -35,17 +36,6 @@ INDEX_PAGES = {"index.md", "log.md", "overview.md"}
 
 def _read_prompt(name: str) -> str:
     return (PROMPTS_DIR / name).read_text("utf-8")
-
-
-def _strip_code_fences(text: str) -> str:
-    """Strip wrapping ```markdown/json ... ``` fences from LLM output."""
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        first_nl = stripped.index("\n") if "\n" in stripped else len(stripped)
-        stripped = stripped[first_nl + 1 :]
-    if stripped.endswith("```"):
-        stripped = stripped[: -3]
-    return stripped.strip()
 
 
 def _all_wiki_md_files(wiki_dir: Path) -> list[Path]:

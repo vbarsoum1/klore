@@ -387,6 +387,18 @@ class TestInit:
         # Git repository
         assert (project_dir / ".git").is_dir()
 
+    def test_init_existing_project_is_idempotent(self, tmp_path: Path) -> None:
+        """Running init twice on the same directory does not crash."""
+        runner = CliRunner()
+        project_dir = tmp_path / "my-kb"
+
+        first = runner.invoke(cli, ["init", str(project_dir)])
+        second = runner.invoke(cli, ["init", str(project_dir)])
+
+        assert first.exit_code == 0, f"first init failed: {first.output}"
+        assert second.exit_code == 0, f"second init failed: {second.output}"
+        assert (project_dir / ".klore" / "config.json").is_file()
+
 
 class TestFullCompile:
     """Tests for the seven-step director-driven compilation pipeline."""
@@ -598,3 +610,6 @@ class TestAsk:
         content = reports[0].read_text("utf-8")
         assert content.startswith("---")
         assert "title:" in content
+        assert "tags:" in content
+        assert '"machine-learning"' in content
+        assert "related_pages:" in content

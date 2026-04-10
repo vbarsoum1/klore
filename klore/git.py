@@ -42,6 +42,15 @@ def git_add_and_commit(
 
 def git_diff(project_dir: Path, since: str | None = None) -> str:
     """Return diff of wiki/ since last commit, or since a time spec."""
+    head = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=project_dir,
+    )
+    if head.returncode != 0:
+        return ""
+
     if since is None:
         return _run(["git", "diff", "HEAD", "--", "wiki/"], cwd=project_dir).stdout
     log = _run(

@@ -163,6 +163,14 @@ class TestGit:
 
         assert result.exit_code == 0
 
+    def test_diff_before_first_commit_is_empty(self, klore_project: Path):
+        runner = CliRunner()
+        with patch("klore.cli._project_dir", return_value=klore_project):
+            result = runner.invoke(cli, ["diff"])
+
+        assert result.exit_code == 0
+        assert "No changes found." in result.output
+
 
 class TestPlugin:
     """Tests that the Claude Code plugin structure is valid."""

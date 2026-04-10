@@ -15,7 +15,7 @@ Follow these steps exactly:
 Run the klore ask command to generate a structured research report:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/commands/_check-klore.sh" && klore ask "$ARGUMENTS"
+source "${CLAUDE_PLUGIN_ROOT}/commands/_check-klore.sh" && klore ask --save "$ARGUMENTS"
 ```
 
 This produces a report with a skeleton structure, key claims, and `[[source]]` / `[[concept]]` references. Read the saved report file.

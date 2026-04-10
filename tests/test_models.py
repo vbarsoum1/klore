@@ -16,13 +16,13 @@ def test_default_fast_model(tmp_path: Path) -> None:
 
 
 def test_default_strong_model(tmp_path: Path) -> None:
-    """get_model('strong', ...) returns google/gemini-3.1-pro-preview with no config."""
-    assert get_model("strong", tmp_path) == "google/gemini-3.1-pro-preview"
+    """get_model('strong', ...) returns google/gemini-3-flash-preview with no config."""
+    assert get_model("strong", tmp_path) == "google/gemini-3-flash-preview"
 
 
 def test_default_director_model(tmp_path: Path) -> None:
-    """get_model('director', ...) returns anthropic/claude-opus-4.6 with no config."""
-    assert get_model("director", tmp_path) == "anthropic/claude-opus-4.6"
+    """get_model('director', ...) returns google/gemini-3-flash-preview with no config."""
+    assert get_model("director", tmp_path) == "google/gemini-3-flash-preview"
 
 
 def test_config_override_model(tmp_path: Path) -> None:

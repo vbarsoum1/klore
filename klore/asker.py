@@ -12,25 +12,8 @@ from klore.git import git_add_and_commit
 from klore.ingester import slugify
 from klore.log import append_log, read_recent_log
 from klore.models import get_client, get_model
-
-
-def _fill_prompt(template: str, **kwargs: str) -> str:
-    """Replace {key} placeholders without Python's format() brace conflicts."""
-    result = template
-    for key, value in kwargs.items():
-        result = result.replace(f"{{{key}}}", str(value))
-    return result
-
-
-def _strip_code_fences(text: str) -> str:
-    """Strip wrapping ```markdown ... ``` fences from LLM output."""
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        first_nl = stripped.index("\n") if "\n" in stripped else len(stripped)
-        stripped = stripped[first_nl + 1:]
-    if stripped.endswith("```"):
-        stripped = stripped[:-3]
-    return stripped.strip()
+from klore.text import fill_prompt as _fill_prompt
+from klore.text import strip_code_fences as _strip_code_fences
 
 
 def _parse_director_json(raw: str) -> dict | None:
@@ -81,6 +64,16 @@ def _load_selected_pages(wiki_dir: Path, page_paths: list[str]) -> str:
         else:
             parts.append(f"=== wiki/{page_with_ext} ===\n(page not found)")
     return "\n\n".join(parts)
+
+
+def _frontmatter_list(name: str, values: list[str]) -> str:
+    """Render a YAML frontmatter list with safely quoted string values."""
+    if not values:
+        return f"{name}: []\n"
+    lines = [f"{name}:"]
+    for value in values:
+        lines.append(f"  - {json.dumps(value)}")
+    return "\n".join(lines) + "\n"
 
 
 async def ask(project_dir: Path, question: str, save: bool = False) -> str:
@@ -175,13 +168,20 @@ async def ask(project_dir: Path, question: str, save: bool = False) -> str:
         report_dir = wiki_dir / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
         report_path = report_dir / f"{slug}.md"
+        report_tags = sorted({
+            Path(page.split("/", 1)[1]).with_suffix("").as_posix()
+            for page in relevant_pages
+            if page.startswith("concepts/") and "/" in page
+        })
 
         frontmatter = (
             "---\n"
-            f'title: "{question}"\n'
-            f'date: "{date.today().isoformat()}"\n'
+            f"title: {json.dumps(question)}\n"
+            f"date: {json.dumps(date.today().isoformat())}\n"
             "type: report\n"
-            "---\n\n"
+            + _frontmatter_list("tags", report_tags)
+            + _frontmatter_list("related_pages", list(relevant_pages))
+            + "---\n\n"
         )
         report_path.write_text(frontmatter + answer, encoding="utf-8")
         click.echo(f"Report saved to {report_path.relative_to(project_dir)}")
