@@ -2,7 +2,7 @@
   <img src="klore-readme-banner.png" alt="Klore — LLM Knowledge Compiler" width="100%">
 </p>
 
-<h3 align="center">Turn documents into a living wiki. One command. Any AI agent.</h3>
+<h3 align="center">Compile your research into durable LLM context.</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/klore/"><img src="https://img.shields.io/pypi/v/klore?color=blue" alt="PyPI"></a>
@@ -20,22 +20,53 @@
 
 ---
 
-**Klore compiles raw sources into a structured, interlinked [Obsidian](https://obsidian.md/)-compatible wiki.** Drop PDFs, articles, and URLs into a folder. Get a living knowledge base with concept pages, entity profiles, cross-references, and a continuously updated synthesis.
+**Klore turns raw source material into a persistent, agent-readable knowledge base.** LLMs forget. RAG retrieves fragments. Klore compiles your documents into structured markdown: source summaries, concept pages, entity profiles, cross-references, saved reports, and a living overview that gets richer over time.
+
+The output is plain [Obsidian](https://obsidian.md/)-compatible markdown that you own. Your coding agent can read it. Your editor can browse it. Git can track it. No vector database required.
 
 Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), extended with a three-tier model architecture where a Director model replaces the human editorial role.
 
-## Why not RAG?
+## Why Klore?
 
 ```
 RAG:     query → search chunks → answer → forget
 Klore:   sources → compile → wiki → query → save → richer wiki → better answers
 ```
 
-RAG retrieves fragments at query time. Every question re-discovers the same relationships from scratch. Nothing accumulates.
+RAG is useful when you need an answer from a pile of documents. Klore is for when the pile itself needs to become usable knowledge.
 
-Klore **compiles** your sources into a wiki. Concepts get their own pages. Pages link to each other. When you ask a question with `--save`, the answer becomes a new page. Your knowledge compounds over time.
+RAG retrieves chunks at query time. Every question rediscovers the same relationships from scratch. The answer usually disappears back into chat history.
 
-**Before:** Read 3,200+ lines of raw files per session. **After:** Read the index + 2 topic articles (~330 lines). **90% context reduction.**
+Klore compiles sources ahead of time. Concepts get their own pages. Entities accumulate profiles. Reports saved with `klore ask --save` feed future synthesis. The knowledge base becomes a durable context layer for humans and agents.
+
+**Before:** read 3,200+ lines of raw files per session.<br>
+**After:** read the index plus 2 topic articles, around 330 lines.<br>
+**Result:** roughly 90% less context for the same working knowledge.
+
+## What You Get
+
+Klore writes a local markdown knowledge base:
+
+```text
+wiki/
+├── index.md              # master map of the knowledge base
+├── overview.md           # continuously updated synthesis
+├── log.md                # chronological operation history
+├── sources/              # per-source summaries with provenance
+├── concepts/             # synthesized articles across sources
+├── entities/             # people, organizations, products, technologies
+├── reports/              # saved Q&A answers that feed future synthesis
+└── _meta/                # compile state, link graph, tag aliases
+```
+
+That gives you:
+
+- **Compiled context:** source material condensed into pages agents can load directly.
+- **Persistent memory:** saved answers become part of the corpus instead of disappearing.
+- **Editorial structure:** a Director model decides what deserves pages, what changed, and what should be linked.
+- **Local ownership:** raw files and generated wiki stay on disk as plain files.
+- **Git history:** every compile can be tracked and diffed.
+- **Agent compatibility:** Claude Code, Cursor, Windsurf, Codex, Gemini, and Copilot can all use the same wiki context.
 
 ## Quick Start
 
@@ -65,9 +96,9 @@ klore compile
 
 Open `wiki/` in [Obsidian](https://obsidian.md/) and explore. Or just read the markdown.
 
-## Agent Setup
+## Agent Memory
 
-Klore works with any AI coding agent. Run `bash setup.sh` to auto-configure all detected agents, or set up manually:
+Klore gives coding agents persistent project memory made from your sources, not just chat history. Run `bash setup.sh` to auto-configure all detected agents, or set up manually:
 
 | Agent | Setup | How it works |
 |-------|-------|-------------|
@@ -78,7 +109,7 @@ Klore works with any AI coding agent. Run `bash setup.sh` to auto-configure all 
 | **[Gemini (Google)](https://aistudio.google.com)** | Open project with Gemini | Auto-loads `GEMINI.md` |
 | **[GitHub Copilot](https://github.com/features/copilot)** | Works automatically | Reads `.github/copilot-instructions.md` |
 
-After setup, your agent can run klore commands directly. In Claude Code, use `/wiki-*` slash commands. In other agents, just ask: "compile the wiki" or "ingest this article".
+After setup, your agent can run klore commands directly. In Claude Code, use `/wiki-*` slash commands. In other agents, ask: "compile the wiki" or "ingest this article".
 
 The Claude Code plugin also injects your wiki's index into every session via a SessionStart hook, so your knowledge base becomes ambient context.
 
